@@ -215,3 +215,4 @@ data/masks/
 
 # Files generated during training
 *.keras
+*.h5
