@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# image
+*.jpg
+images/
+
 # Distribution / packaging
 .Python
 build/
@@ -214,5 +218,5 @@ data/images/
 data/masks/
 
 # Files generated during training
-*.keras
+#*.keras
 *.h5
