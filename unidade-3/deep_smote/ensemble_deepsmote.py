@@ -59,7 +59,7 @@ TEST_SPLIT_PATH = DEEPSMOTE_DIR / "test_real_split.csv"
 
 MODELS_DIR = PROJECT_ROOT / "models"
 
-RESULTS_DIR = PROJECT_ROOT / "results" / "ensemble_deepsmote"
+RESULTS_DIR = PROJECT_ROOT / "results" / "ensemble_deepsmote_model5_oversampling"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 TEST_SIZE = 0.20
@@ -521,13 +521,33 @@ print("Tempo total:", round(elapsed_total, 2), "segundos")
 print("Tempo total:", round(elapsed_total / 60, 2), "minutos")
 
 print("Relatório de Classificação do Ensemble DeepSMOTE com Multi-Crop TTA:")
-print(classification_report(
+
+classification_report_text = classification_report(
     y_true_multicrop,
     y_pred_multicrop,
     target_names=classes,
     digits=4,
     zero_division=0
-))
+)
+
+print(classification_report_text)
+
+classification_report_dict = classification_report(
+    y_true_multicrop,
+    y_pred_multicrop,
+    target_names=classes,
+    digits=4,
+    zero_division=0,
+    output_dict=True
+)
+
+classification_report_df = pd.DataFrame(classification_report_dict).transpose()
+classification_report_path = RESULTS_DIR / "classification_report_ensemble_oversampling.csv"
+classification_report_df.to_csv(classification_report_path)
+
+classification_report_txt_path = RESULTS_DIR / "classification_report_ensemble_oversampling.txt"
+with open(classification_report_txt_path, "w", encoding="utf-8") as f:
+    f.write(classification_report_text)
 
 acc_multicrop = accuracy_score(y_true_multicrop, y_pred_multicrop)
 
@@ -561,6 +581,54 @@ cm_multicrop = confusion_matrix(
 cm_percent_multicrop = cm_multicrop.astype("float") / cm_multicrop.sum(axis=1, keepdims=True) * 100
 cm_percent_multicrop = np.nan_to_num(cm_percent_multicrop)
 
+cm_abs_df = pd.DataFrame(
+    cm_multicrop,
+    index=classes,
+    columns=classes
+)
+
+cm_abs_path = RESULTS_DIR / "matrix_confusion_ensemble_oversampling_absolute.csv"
+cm_abs_df.to_csv(cm_abs_path)
+
+print("\nMatriz de confusão absoluta:")
+print(cm_abs_df)
+
+fig, ax = plt.subplots(figsize=(10, 8))
+
+im = ax.imshow(cm_multicrop, cmap="Blues", vmin=0, vmax=200)
+
+ax.set_title("Matrix Confusion - Model 14 (Ensemble with DeepSMOTE)", fontsize=16)
+ax.set_xlabel("Predicted Class", fontsize=12)
+ax.set_ylabel("True Class", fontsize=12)
+
+ax.set_xticks(np.arange(len(classes)))
+ax.set_yticks(np.arange(len(classes)))
+ax.set_xticklabels(classes, rotation=45, ha="right")
+ax.set_yticklabels(classes)
+
+threshold = cm_multicrop.max() * 0.5
+
+for i in range(cm_multicrop.shape[0]):
+    for j in range(cm_multicrop.shape[1]):
+        color = "white" if cm_multicrop[i, j] > threshold else "black"
+        ax.text(
+            j,
+            i,
+            str(cm_multicrop[i, j]),
+            ha="center",
+            va="center",
+            color=color,
+            fontsize=11
+        )
+
+cbar = plt.colorbar(im, ax=ax)
+cbar.set_label("Quantity")
+
+plt.tight_layout()
+cm_abs_img_path = RESULTS_DIR / "matrix_confusion_ensemble_oversampling_absolute.png"
+plt.savefig(cm_abs_img_path, dpi=300, bbox_inches="tight")
+plt.show()
+
 plt.figure(figsize=(8, 7))
 im = plt.imshow(
     cm_percent_multicrop,
@@ -570,7 +638,7 @@ im = plt.imshow(
     vmax=100
 )
 
-plt.title("Matriz de Confusão (%) - Ensemble DeepSMOTE + Multi-Crop TTA")
+plt.title("Matrix Confusion (%) - Model 5 (Ensemble with Oversampling)")
 plt.colorbar(im, label="%")
 
 tick_marks = np.arange(len(classes))
@@ -590,9 +658,11 @@ for i in range(cm_percent_multicrop.shape[0]):
             fontsize=8
         )
 
-plt.ylabel("Classe Real")
-plt.xlabel("Classe Predita")
+plt.ylabel("True Class")
+plt.xlabel("Predicted Class")
 plt.tight_layout()
+cm_percent_img_path = RESULTS_DIR / "matrix_confusion_ensemble_oversampling_percent.png"
+plt.savefig(cm_percent_img_path, dpi=300, bbox_inches="tight")
 plt.show()
 
 cm_percent_df = pd.DataFrame(
@@ -618,8 +688,134 @@ predictions_df["correct"] = predictions_df["y_true"] == predictions_df["y_pred"]
 for idx, class_label in enumerate(classes):
     predictions_df[f"prob_{class_label}"] = y_prob_multicrop[:, idx]
 
+predictions_df["confidence_pred"] = [
+    y_prob_multicrop[i, y_pred_multicrop[i]]
+    for i in range(len(y_pred_multicrop))
+]
+
 predictions_path = RESULTS_DIR / f"{EXPERIMENT_NAME}_predictions.csv"
 predictions_df.to_csv(predictions_path, index=False)
+
+EXAMPLES_DIR = RESULTS_DIR / "examples"
+EXAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def make_example_grid(
+    df,
+    output_path,
+    title,
+    group_col,
+    n_per_class=3,
+    sort_col="confidence_pred"
+):
+    """
+    Gera uma grade de exemplos por classe.
+
+    - Verdadeiros positivos: use group_col="class_true".
+    - Falsos positivos: use group_col="class_pred".
+    """
+
+    n_rows = len(classes)
+    n_cols = n_per_class
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(4 * n_cols, 3.6 * n_rows)
+    )
+
+    if n_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    if n_cols == 1:
+        axes = np.expand_dims(axes, axis=1)
+
+    fig.suptitle(title, fontsize=16)
+
+    for row_idx, class_label in enumerate(classes):
+        subset = df[df[group_col] == class_label].copy()
+
+        if sort_col in subset.columns:
+            subset = subset.sort_values(sort_col, ascending=False)
+
+        subset = subset.head(n_per_class)
+
+        for col_idx in range(n_cols):
+            ax = axes[row_idx, col_idx]
+            ax.axis("off")
+
+            if col_idx >= len(subset):
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"No example\n{class_label}",
+                    ha="center",
+                    va="center",
+                    fontsize=10
+                )
+                continue
+
+            row = subset.iloc[col_idx]
+
+            try:
+                image = preprocess_base_image(row["image_path"], row["mask_path"])
+                image = np.clip(image, 0, 255).astype("uint8")
+                ax.imshow(image)
+
+                true_label = row["class_true"]
+                pred_label = row["class_pred"]
+                confidence = row["confidence_pred"]
+
+                ax.set_title(
+                    f"True: {true_label}\nPred: {pred_label}\nP={confidence:.3f}",
+                    fontsize=10
+                )
+
+            except Exception as error:
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"Error\n{row.get('image', '')}",
+                    ha="center",
+                    va="center",
+                    fontsize=9
+                )
+                print(f"Erro ao carregar exemplo {row.get('image', '')}: {error}")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.show()
+
+
+true_positive_examples = predictions_df[predictions_df["correct"] == True].copy()
+false_positive_examples = predictions_df[predictions_df["correct"] == False].copy()
+
+tp_examples_path = RESULTS_DIR / "examples_true_positives.csv"
+fp_examples_path = RESULTS_DIR / "examples_false_positives.csv"
+
+true_positive_examples.to_csv(tp_examples_path, index=False)
+false_positive_examples.to_csv(fp_examples_path, index=False)
+
+tp_img_path = EXAMPLES_DIR / "examples_true_positives_by_class.png"
+fp_img_path = EXAMPLES_DIR / "examples_false_positives_by_predicted_class.png"
+
+make_example_grid(
+    df=true_positive_examples,
+    output_path=tp_img_path,
+    title="True Positive Examples - Model 5 Ensemble with Oversampling",
+    group_col="class_true",
+    n_per_class=3,
+    sort_col="confidence_pred"
+)
+
+make_example_grid(
+    df=false_positive_examples,
+    output_path=fp_img_path,
+    title="False Positive Examples by Predicted Class - Model 5 Ensemble with Oversampling",
+    group_col="class_pred",
+    n_per_class=3,
+    sort_col="confidence_pred"
+)
 
 metrics = {
     "experiment_name": EXPERIMENT_NAME,
@@ -652,7 +848,13 @@ metrics = {
         "include_full_image": INCLUDE_FULL_IMAGE,
         "use_horizontal_flip": USE_HORIZONTAL_FLIP,
         "use_vertical_flip": USE_VERTICAL_FLIP,
-        "use_hv_flip": USE_HV_FLIP
+        "use_hv_flip": USE_HV_FLIP,
+        "confusion_matrix_absolute_plot": {
+            "title": "Matrix Confusion - Model 5 (Ensemble with Oversampling)",
+            "cmap": "Blues",
+            "vmin": 0,
+            "vmax": 200
+        }
     },
     "metrics": {
         "accuracy": float(acc_multicrop),
@@ -675,7 +877,39 @@ with open(metrics_path, "w", encoding="utf-8") as f:
 cm_path = RESULTS_DIR / f"{EXPERIMENT_NAME}_confusion_matrix_percent.csv"
 cm_percent_df.to_csv(cm_path)
 
+ensemble_reference_path = RESULTS_DIR / "ensemble_model5_reference.json"
+ensemble_reference = {
+    "model_a": {"name": "DenseNet201 + DeepSMOTE", "path": str(MODEL_A_PATH), "img_size": IMG_SIZE_A, "weight": WEIGHT_MODEL_A},
+    "model_b": {"name": "DenseNet169 + DeepSMOTE", "path": str(MODEL_B_PATH), "img_size": IMG_SIZE_B, "weight": WEIGHT_MODEL_B},
+    "model_c": {"name": "EfficientNetB4 + DeepSMOTE", "path": str(MODEL_C_PATH), "img_size": IMG_SIZE_C, "weight": WEIGHT_MODEL_C},
+    "preprocessing": {
+        "use_dull_razor": USE_DULL_RAZOR,
+        "use_mask_segmentation": USE_MASK_SEGMENTATION,
+        "use_mask_crop": USE_MASK_CROP,
+        "crop_margin": CROP_MARGIN
+    },
+    "multicrop_tta": {
+        "local_crop_ratio": LOCAL_CROP_RATIO,
+        "include_full_image": INCLUDE_FULL_IMAGE,
+        "use_horizontal_flip": USE_HORIZONTAL_FLIP,
+        "use_vertical_flip": USE_VERTICAL_FLIP,
+        "use_hv_flip": USE_HV_FLIP
+    }
+}
+with open(ensemble_reference_path, "w", encoding="utf-8") as f:
+    json.dump(ensemble_reference, f, indent=4, ensure_ascii=False)
+
 print("Resultados salvos com sucesso:")
 print("Predições:", predictions_path)
+print("Relatório CSV:", classification_report_path)
+print("Relatório TXT:", classification_report_txt_path)
 print("Métricas:", metrics_path)
-print("Matriz de confusão:", cm_path)
+print("Referência do ensemble:", ensemble_reference_path)
+print("Matriz absoluta CSV:", cm_abs_path)
+print("Matriz absoluta PNG:", cm_abs_img_path)
+print("Matriz percentual CSV:", cm_path)
+print("Matriz percentual PNG:", cm_percent_img_path)
+print("Exemplos TP CSV:", tp_examples_path)
+print("Exemplos FP CSV:", fp_examples_path)
+print("Exemplos TP PNG:", tp_img_path)
+print("Exemplos FP PNG:", fp_img_path)
