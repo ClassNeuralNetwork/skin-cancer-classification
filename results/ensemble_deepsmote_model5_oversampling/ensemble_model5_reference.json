@@ -1,0 +1,42 @@
+{
+    "model_a": {
+        "name": "DenseNet201 + DeepSMOTE",
+        "path": "/home/cibely/Documents/skin-cancer-classification/models/best_densenet201_deepsmote_saved_images.keras",
+        "img_size": [
+            320,
+            320
+        ],
+        "weight": 0.7
+    },
+    "model_b": {
+        "name": "DenseNet169 + DeepSMOTE",
+        "path": "/home/cibely/Documents/skin-cancer-classification/models/best_densenet169_deepsmote_saved_images.keras",
+        "img_size": [
+            320,
+            320
+        ],
+        "weight": 0.2
+    },
+    "model_c": {
+        "name": "EfficientNetB4 + DeepSMOTE",
+        "path": "/home/cibely/Documents/skin-cancer-classification/models/best_efficientnetb4_deepsmote_saved_images.keras",
+        "img_size": [
+            380,
+            380
+        ],
+        "weight": 0.1
+    },
+    "preprocessing": {
+        "use_dull_razor": false,
+        "use_mask_segmentation": false,
+        "use_mask_crop": true,
+        "crop_margin": 20
+    },
+    "multicrop_tta": {
+        "local_crop_ratio": 0.9,
+        "include_full_image": true,
+        "use_horizontal_flip": true,
+        "use_vertical_flip": false,
+        "use_hv_flip": false
+    }
+}
