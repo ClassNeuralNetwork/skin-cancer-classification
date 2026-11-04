@@ -44,6 +44,21 @@ try:
         f1_score
     )
 
+    try:
+        from project_paths import PROJECT_ROOT, resolve_project_path
+    except ModuleNotFoundError:
+        import sys
+
+        for candidate in (Path.cwd(), *Path.cwd().parents):
+            module_dir = candidate / "03_transfer_learning" / "deep_smote"
+            if (module_dir / "project_paths.py").is_file():
+                sys.path.insert(0, str(module_dir))
+                break
+        else:
+            raise
+
+        from project_paths import PROJECT_ROOT, resolve_project_path
+
     print("TensorFlow:", tf.__version__)
     print("Keras:", keras.__version__)
 finally:
@@ -66,18 +81,18 @@ try:
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
 
-    DATA_DIR = Path("../../data")
+    DATA_DIR = PROJECT_ROOT / "data"
     DEEPSMOTE_DIR = DATA_DIR / "deepsmote"
 
     TRAIN_REAL_CSV = DEEPSMOTE_DIR / "train_real_split.csv"
     TEST_REAL_CSV = DEEPSMOTE_DIR / "test_real_split.csv"
     SYNTH_CSV = DEEPSMOTE_DIR / "metadata_deepsmote.csv"
 
-    MODELS_DIR = Path("../../models/deep_smote")
+    MODELS_DIR = PROJECT_ROOT / "models" / "deep_smote"
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    FIGURES_DIR = Path("../../results/figures/deep_smote")
-    METRICS_DIR = Path("../../results/metrics/deep_smote")
+    FIGURES_DIR = PROJECT_ROOT / "results" / "figures" / "deep_smote"
+    METRICS_DIR = PROJECT_ROOT / "results" / "metrics" / "deep_smote"
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -121,6 +136,37 @@ try:
     train_real_df = pd.read_csv(TRAIN_REAL_CSV)
     test_df = pd.read_csv(TEST_REAL_CSV)
     synth_df = pd.read_csv(SYNTH_CSV)
+
+    def resolve_dataframe_paths(dataframe):
+        dataframe = dataframe.copy()
+        for column in ["image_path", "mask_path"]:
+            dataframe[column] = dataframe[column].map(
+                lambda value: (
+                    value if pd.isna(value) else resolve_project_path(value)
+                )
+            )
+        return dataframe
+
+
+    train_real_df = resolve_dataframe_paths(train_real_df)
+    test_df = resolve_dataframe_paths(test_df)
+    synth_df = resolve_dataframe_paths(synth_df)
+
+    for dataset_name, dataframe in [
+        ("treino real", train_real_df),
+        ("teste real", test_df),
+        ("sintético", synth_df),
+    ]:
+        missing = [
+            path
+            for path in dataframe["image_path"]
+            if not Path(path).is_file()
+        ]
+        if missing:
+            raise FileNotFoundError(
+                f"{len(missing)} imagens ausentes no conjunto {dataset_name}. "
+                f"Exemplo: {missing[0]}"
+            )
 
     train_real_df["is_synthetic"] = 0
     synth_df["is_synthetic"] = 1

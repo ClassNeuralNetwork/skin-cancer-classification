@@ -28,6 +28,7 @@ try:
     os.environ["KERAS_BACKEND"] = "tensorflow"
 
     import gc
+    import json
     import random
     from pathlib import Path
     from collections import Counter
@@ -44,20 +45,37 @@ try:
     from sklearn.model_selection import train_test_split
     from sklearn.neighbors import NearestNeighbors
 
+    try:
+        from project_paths import PROJECT_ROOT, to_project_relative
+    except ModuleNotFoundError:
+        import sys
+
+        for candidate in (Path.cwd(), *Path.cwd().parents):
+            module_dir = candidate / "03_transfer_learning" / "deep_smote"
+            if (module_dir / "project_paths.py").is_file():
+                sys.path.insert(0, str(module_dir))
+                break
+        else:
+            raise
+
+        from project_paths import PROJECT_ROOT, to_project_relative
+
+    gpus = tf.config.list_physical_devices("GPU")
+    for gpu in gpus:
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError:
+            pass
+
     print("TensorFlow:", tf.__version__)
     print("Keras:", keras.__version__)
+    print("GPUs disponíveis:", gpus)
 finally:
     _cell_elapsed_time = _time.time() - _cell_start_time
     _notebook_total_time = globals().get('_notebook_total_time', 0.0) + _cell_elapsed_time
     _notebook_cell_times = globals().get('_notebook_cell_times', [])
     _notebook_cell_times.append((1, _cell_elapsed_time))
     print("\nTempo da célula 1: {:.2f} segundos".format(_cell_elapsed_time))
-
-# %%
-tf.config.list_physical_devices('GPU')
-
-# %% [markdown]
-# 
 
 # %% [markdown]
 # ## 1. Configurações
@@ -72,27 +90,31 @@ try:
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
 
-    DATA_DIR = Path("../../data")
+    DATA_DIR = PROJECT_ROOT / "data"
 
     IMAGES_DIR = DATA_DIR / "images"
     MASKS_DIR = DATA_DIR / "masks"
     CSV_PATH = DATA_DIR / "GroundTruth.csv"
 
     OUTPUT_DIR = DATA_DIR / "deepsmote"
-    SYNTH_IMAGES_DIR = OUTPUT_DIR / "images"
+    SYNTH_IMAGES_DIR = OUTPUT_DIR / "generated_images"
     SYNTH_CSV_PATH = OUTPUT_DIR / "metadata_deepsmote.csv"
 
-    FIGURES_DIR = Path("../../results/figures/deep_smote")
+    FIGURES_DIR = PROJECT_ROOT / "results" / "figures" / "deep_smote"
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
-    MODELS_DIR = Path("../../models/deep_smote")
+    MODELS_DIR = PROJECT_ROOT / "models" / "deep_smote"
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    AUTOENCODER_PATH = MODELS_DIR / "deepsmote_autoencoder_crop_160_latent512.keras"
-    ENCODER_PATH = MODELS_DIR / "deepsmote_encoder_crop_160_latent512.keras"
-    DECODER_PATH = MODELS_DIR / "deepsmote_decoder_crop_160_latent512.keras"
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    SYNTH_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+    AUTOENCODER_PATH = MODELS_DIR / "deepsmote_autoencoder_crop_256_latent512.keras"
+    ENCODER_PATH = MODELS_DIR / "deepsmote_encoder_crop_256_latent512.keras"
+    DECODER_PATH = MODELS_DIR / "deepsmote_decoder_crop_256_latent512.keras"
 
     TEST_SIZE = 0.20
+    AUTOENCODER_VALIDATION_SIZE = 0.10
 
     DEEPSMOTE_IMG_SIZE = (256, 256)
 
@@ -116,6 +138,7 @@ try:
     print("BATCH_SIZE:", BATCH_SIZE)
     print("AE_EPOCHS:", AE_EPOCHS)
     print("OUTPUT_DIR:", OUTPUT_DIR.resolve())
+    print("SYNTH_IMAGES_DIR:", SYNTH_IMAGES_DIR.resolve())
 finally:
     _cell_elapsed_time = _time.time() - _cell_start_time
     _notebook_total_time = globals().get('_notebook_total_time', 0.0) + _cell_elapsed_time
@@ -179,7 +202,11 @@ try:
             return None
 
         height, width = target_shape[:2]
-        mask = cv2.resize(mask, (width, height))
+        mask = cv2.resize(
+            mask,
+            (width, height),
+            interpolation=cv2.INTER_NEAREST,
+        )
         binary_mask = (mask > 127).astype(np.uint8)
 
         if binary_mask.sum() == 0:
@@ -224,7 +251,18 @@ try:
                 margin=CROP_MARGIN
             )
 
-        image_rgb = cv2.resize(image_rgb, target_size)
+        target_width, target_height = target_size
+        source_height, source_width = image_rgb.shape[:2]
+        interpolation = (
+            cv2.INTER_AREA
+            if source_width > target_width or source_height > target_height
+            else cv2.INTER_CUBIC
+        )
+        image_rgb = cv2.resize(
+            image_rgb,
+            (target_width, target_height),
+            interpolation=interpolation,
+        )
         image_rgb = image_rgb.astype("float32") / 127.5 - 1.0  
 
         return image_rgb
@@ -235,6 +273,21 @@ try:
         if img.min() < 0:
             img = (img + 1.0) / 2.0
         return np.clip(img, 0.0, 1.0)
+
+
+    def save_metadata_csv(dataframe, csv_path):
+        export_df = dataframe.copy()
+
+        for column in ["image_path", "mask_path"]:
+            export_df[column] = export_df[column].map(
+                lambda value: (
+                    None
+                    if value is None or pd.isna(value)
+                    else to_project_relative(value)
+                )
+            )
+
+        export_df.to_csv(csv_path, index=False)
 
     print("Funções definidas.")
 finally:
@@ -298,12 +351,23 @@ try:
     train_df = train_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    train_df.to_csv(OUTPUT_DIR / "train_real_split.csv", index=False)
-    test_df.to_csv(OUTPUT_DIR / "test_real_split.csv", index=False)
+    save_metadata_csv(train_df, OUTPUT_DIR / "train_real_split.csv")
+    save_metadata_csv(test_df, OUTPUT_DIR / "test_real_split.csv")
+
+    ae_train_df, ae_val_df = train_test_split(
+        train_df,
+        test_size=AUTOENCODER_VALIDATION_SIZE,
+        random_state=SEED,
+        stratify=train_df["label"],
+    )
+
+    ae_train_df = ae_train_df.reset_index(drop=True)
+    ae_val_df = ae_val_df.reset_index(drop=True)
 
     print("\nTreino:", len(train_df))
     print("Teste:", len(test_df))
+    print("Treino do autoencoder:", len(ae_train_df))
+    print("Validação do autoencoder:", len(ae_val_df))
     print("\nDistribuição treino:")
     print(train_df["class_name"].value_counts().reindex(classes))
     print("\nDistribuição teste:")
@@ -341,17 +405,20 @@ try:
         tf.TensorSpec(shape=(*DEEPSMOTE_IMG_SIZE, 3), dtype=tf.float32),
     )
 
-    ae_ds = tf.data.Dataset.from_generator(
-        lambda: deepsmote_generator(train_df),
-        output_signature=output_signature
-    )
+    def make_autoencoder_dataset(dataframe, shuffle=False):
+        dataset = tf.data.Dataset.from_generator(
+            lambda: deepsmote_generator(dataframe),
+            output_signature=output_signature,
+        )
 
-    ae_ds = (
-        ae_ds
-        .shuffle(1024, seed=SEED)
-        .batch(BATCH_SIZE)
-        .prefetch(tf.data.AUTOTUNE)
-    )
+        if shuffle:
+            dataset = dataset.shuffle(1024, seed=SEED)
+
+        return dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+
+
+    ae_train_ds = make_autoencoder_dataset(ae_train_df, shuffle=True)
+    ae_val_ds = make_autoencoder_dataset(ae_val_df, shuffle=False)
 
     print("Dataset do autoencoder criado.")
 finally:
@@ -467,19 +534,19 @@ try:
     callbacks = [
         keras.callbacks.ModelCheckpoint(
             AUTOENCODER_PATH,
-            monitor="loss",
+            monitor="val_loss",
             save_best_only=True,
             mode="min",
             verbose=1
         ),
         keras.callbacks.EarlyStopping(
-            monitor="loss",
+            monitor="val_loss",
             patience=15,
             restore_best_weights=True,
             verbose=1
         ),
         keras.callbacks.ReduceLROnPlateau(
-            monitor="loss",
+            monitor="val_loss",
             factor=0.5,
             patience=6,
             min_lr=1e-7,
@@ -489,7 +556,8 @@ try:
 
     if TRAIN_AUTOENCODER or not AUTOENCODER_PATH.exists():
         history = autoencoder.fit(
-            ae_ds,
+            ae_train_ds,
+            validation_data=ae_val_ds,
             epochs=AE_EPOCHS,
             callbacks=callbacks
         )
@@ -500,6 +568,7 @@ try:
 
         plt.figure(figsize=(8, 5))
         plt.plot(history.history["loss"], label="loss")
+        plt.plot(history.history["val_loss"], label="val_loss")
         plt.title("Treinamento do Autoencoder DeepSMOTE")
         plt.xlabel("Época")
         plt.ylabel("MAE")
@@ -722,6 +791,9 @@ try:
     print("y_synth:", y_synth.shape)
     print("Distribuição sintética:")
     print(Counter(y_synth))
+
+    if len(Z_synth) == 0:
+        raise RuntimeError("O DeepSMOTE não gerou vetores sintéticos.")
 finally:
     _cell_elapsed_time = _time.time() - _cell_start_time
     _notebook_total_time = globals().get('_notebook_total_time', 0.0) + _cell_elapsed_time
@@ -766,17 +838,23 @@ try:
                 class_dir = SYNTH_IMAGES_DIR / label_name
                 class_dir.mkdir(parents=True, exist_ok=True)
 
-                filename = f"{label_name}_synth_{global_index:06d}.jpg"
+                filename = f"{label_name}_synth_{global_index:06d}.png"
                 save_path = class_dir / filename
 
                 img_uint8 = (img * 255).astype("uint8")
                 img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
 
-                cv2.imwrite(str(save_path), img_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                saved = cv2.imwrite(
+                    str(save_path),
+                    img_bgr,
+                    [int(cv2.IMWRITE_PNG_COMPRESSION), 3],
+                )
+                if not saved:
+                    raise OSError(f"Falha ao salvar a imagem sintética: {save_path}")
 
                 synth_rows.append({
-                    "image": filename.replace(".jpg", ""),
-                    "image_path": str(save_path),
+                    "image": save_path.stem,
+                    "image_path": str(save_path.resolve()),
                     "mask_path": None,
                     "class_name": label_name,
                     "label": label,
@@ -791,7 +869,7 @@ try:
             print(f"Salvas {end}/{total} imagens sintéticas")
 
         synth_df = pd.DataFrame(synth_rows)
-        synth_df.to_csv(SYNTH_CSV_PATH, index=False)
+        save_metadata_csv(synth_df, SYNTH_CSV_PATH)
 
         print("CSV sintético salvo em:", SYNTH_CSV_PATH)
         print("Total sintéticas salvas:", len(synth_df))
@@ -807,6 +885,32 @@ try:
     )
 
     print(synth_df["class_name"].value_counts().reindex(classes))
+
+    manifest = {
+        "seed": SEED,
+        "image_size": list(DEEPSMOTE_IMG_SIZE),
+        "image_format": "png",
+        "latent_dim": LATENT_DIM,
+        "batch_size": BATCH_SIZE,
+        "autoencoder_epochs": AE_EPOCHS,
+        "use_mask_crop": USE_MASK_CROP,
+        "crop_margin": CROP_MARGIN,
+        "train_real_count": int(len(train_df)),
+        "test_real_count": int(len(test_df)),
+        "synthetic_count": int(len(synth_df)),
+        "synthetic_by_class": {
+            key: int(value)
+            for key, value in synth_df["class_name"].value_counts().items()
+        },
+        "tensorflow_version": tf.__version__,
+        "keras_version": keras.__version__,
+    }
+    manifest_path = OUTPUT_DIR / "generation_config.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print("Configuração da geração salva em:", manifest_path)
 finally:
     _cell_elapsed_time = _time.time() - _cell_start_time
     _notebook_total_time = globals().get('_notebook_total_time', 0.0) + _cell_elapsed_time
