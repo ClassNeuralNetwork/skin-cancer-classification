@@ -157,7 +157,7 @@ model.compile(
 
 callbacks = [
     keras.callbacks.ModelCheckpoint(
-        os.path.join(MODELS_DIR, "save_at_{epoch}.keras")
+        os.path.join(MODELS_DIR, "inception_v3_finetuned_final.keras")
     ),
 ]
 
