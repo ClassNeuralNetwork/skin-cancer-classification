@@ -82,6 +82,9 @@ try:
     SYNTH_IMAGES_DIR = OUTPUT_DIR / "images"
     SYNTH_CSV_PATH = OUTPUT_DIR / "metadata_deepsmote.csv"
 
+    FIGURES_DIR = Path("../../results/figures/deep_smote")
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+
     MODELS_DIR = Path("../../models/deep_smote")
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -502,7 +505,7 @@ try:
         plt.ylabel("MAE")
         plt.legend()
         plt.grid(True)
-        plt.savefig(OUTPUT_DIR / "curvas_treinamento_autoencoder.png", dpi=300, bbox_inches="tight")
+        plt.savefig(FIGURES_DIR / "curvas_treinamento_autoencoder.png", dpi=300, bbox_inches="tight")
         plt.show()
     else:
         autoencoder = keras.models.load_model(AUTOENCODER_PATH)
@@ -557,7 +560,7 @@ try:
 
     plt.suptitle("Reconstrução pelo Autoencoder")
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "reconstrucao_autoencoder.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIGURES_DIR / "reconstrucao_autoencoder.png", dpi=300, bbox_inches="tight")
     plt.show()
 
     del preview, recon
@@ -835,7 +838,7 @@ try:
 
     plt.suptitle("Exemplos de imagens sintéticas DeepSMOTE salvas")
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "exemplos_imagens_sinteticas_deepsmote.png", dpi=300, bbox_inches="tight")
+    plt.savefig(FIGURES_DIR / "exemplos_imagens_sinteticas_deepsmote.png", dpi=300, bbox_inches="tight")
     plt.show()
 finally:
     _cell_elapsed_time = _time.time() - _cell_start_time

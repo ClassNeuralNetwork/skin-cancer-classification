@@ -1,0 +1,55 @@
+{
+    "experiment_name": "ensemble_3_modelos_multicrop_ratio0p9_A0p7_B0p2_C0p1",
+    "date": "2026-06-27 18:50:00",
+    "configuration": {
+        "model_a": {
+            "name": "DenseNet201 + Crop + SMOTE",
+            "img_size": [
+                320,
+                320
+            ],
+            "feature_extractor": "densenet201_crop_320_feature_extractor.keras",
+            "classifier": "best_densenet201_crop_oversampling_320.keras",
+            "weight": 0.7
+        },
+        "model_b": {
+            "name": "DenseNet169 + Crop + SMOTE",
+            "img_size": [
+                256,
+                256
+            ],
+            "feature_extractor": "densenet169_dull_crop_feature_extractor.keras",
+            "classifier": "best_densenet169_dull_crop_oversampling.keras",
+            "weight": 0.2
+        },
+        "model_c": {
+            "name": "EfficientNetB4 + Crop + SMOTE",
+            "img_size": [
+                380,
+                380
+            ],
+            "feature_extractor": "efficientnetb4_crop_380_feature_extractor.keras",
+            "classifier": "best_efficientnetb4_crop_oversampling_380.keras",
+            "weight": 0.1
+        },
+        "use_dull_razor": false,
+        "use_mask_segmentation": false,
+        "use_mask_crop": true,
+        "crop_margin": 20,
+        "multicrop_tta": true,
+        "local_crop_ratio": 0.9,
+        "include_full_image": true,
+        "use_horizontal_flip": true,
+        "use_vertical_flip": false,
+        "use_hv_flip": false
+    },
+    "metrics": {
+        "accuracy": 0.8841737393909136,
+        "macro_precision": 0.8272435154227323,
+        "macro_recall": 0.8021042805663009,
+        "macro_f1": 0.8133087805238256,
+        "weighted_precision": 0.8806093798706813,
+        "weighted_recall": 0.8841737393909136,
+        "weighted_f1": 0.8814626803504703
+    }
+}
