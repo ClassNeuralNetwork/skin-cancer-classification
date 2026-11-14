@@ -34,6 +34,7 @@ Este documento relaciona a evolução do TCC aos arquivos do repositório. A pas
 | Pipeline DeepSMOTE | `deep_smote/01_generate_deepsmote_dataset.ipynb` |
 | Treino com DeepSMOTE salvo | notebooks `02_train_*` em `deep_smote/` |
 | Avaliação DeepSMOTE | notebooks `avaliar_metricas_*` em `deep_smote/` |
+| Validação cruzada | notebooks de DenseNet169, DenseNet201 e EfficientNetB4 em `cross_validation/` |
 
 ## 04 — Ensembles e inferência
 
@@ -45,6 +46,7 @@ Este documento relaciona a evolução do TCC aos arquivos do repositório. A pas
 | `ensemble_3_multicrop_gradcam.ipynb` | multi-crop TTA com Grad-CAM |
 | `tta/avaliacao_tta.ipynb` | avaliação isolada de TTA |
 | `deepsmote/ensemble_deepsmote.py` | ensemble dos modelos treinados com DeepSMOTE |
+| `cross_validation/ensemble_3_cross_validation.ipynb` | soft voting com predições out-of-fold de três arquiteturas |
 
 ## Convenção para novos experimentos
 

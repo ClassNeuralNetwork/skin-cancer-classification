@@ -1,0 +1,19 @@
+{
+  "architecture": "densenet169",
+  "image_size": [
+    320,
+    320
+  ],
+  "batch_size": 16,
+  "epochs": 60,
+  "n_splits": 5,
+  "learning_rate": 0.0001,
+  "early_stopping_patience": 8,
+  "reduce_lr_patience": 4,
+  "seed": 42,
+  "balance_strategy": "random_oversampling",
+  "oversampling_target_count": null,
+  "backbone_weights": "imagenet",
+  "save_fold_models": false,
+  "gpu_devices": []
+}

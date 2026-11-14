@@ -4,6 +4,7 @@ Experimentos com InceptionV3, DenseNet169, DenseNet201 e EfficientNet, combinado
 
 - `metodologia_deep_skin/`: variações da metodologia de pré-processamento.
 - `deep_smote/`: geração do conjunto sintético, treinamento e avaliação.
+- `cross_validation/`: comparação isolada das arquiteturas com folds estratificados.
 - `scripts/`: scripts auxiliares para produzir figuras metodológicas.
 
 Para executar o DeepSMOTE em outra máquina, siga o roteiro em `deep_smote/README.md`. Ele inclui a preparação do Git LFS, a instalação do ambiente e uma verificação rápida da workstation.

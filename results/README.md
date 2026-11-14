@@ -7,6 +7,7 @@ results/
 ├── figures/           # curvas, matrizes de confusão e exemplos visuais
 ├── metrics/           # métricas tabulares dos modelos individuais
 ├── ensembles/         # predições, métricas e exemplos dos ensembles
+├── cross_validation/  # folds, históricos e predições out-of-fold
 └── training_history/  # histórico de treinamento
 ```
 
